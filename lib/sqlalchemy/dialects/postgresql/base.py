@@ -3117,7 +3117,19 @@ class PGDialect(default.DefaultDialect):
         # https://www.postgresql.org/docs/9.3/static/release-9-2.html#AEN116689
         self.supports_smallserial = self.server_version_info >= (9, 2)
 
-        self._set_backslash_escapes(connection)
+        # NOTE: Please leave this server version check intact, regardless
+        # of supported PostgreSQL version, for as long as Amazon Redshift
+        # reports < 8.2 as their version string.  See #5698 and #9442
+        is_potentially_redshift = self.server_version_info < (8, 2)
+
+        if is_potentially_redshift:
+            self._backslash_escapes = False
+            self._supports_create_index_concurrently = False
+        else:
+            std_string = connection.exec_driver_sql(
+                "show standard_conforming_strings"
+            ).scalar()
+            self._backslash_escapes = std_string == "off"
 
         self._supports_drop_index_concurrently = self.server_version_info >= (
             9,
